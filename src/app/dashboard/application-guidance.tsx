@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
-import { GraduationCap, FileText, Calendar, CheckCircle2, Lock, Unlock } from 'lucide-react'
+import { GraduationCap, Lock, Unlock, MapPin, ChevronDown, Check, Sparkles, FileText, CheckCircle2, Calendar } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useUniversityLocks } from '@/app/hooks/useUniversityLocks'
+import { toast } from 'sonner'
 
 interface LockedUniversity {
     university_id: string
@@ -49,11 +50,12 @@ export default function ApplicationGuidance() {
 
         setLockedUniversities(universities || [])
 
-        // Fetch tasks for locked universities
+        // Fetch ONLY AI-generated tasks for locked universities
         const { data: tasksData } = await supabase
             .from('tasks')
             .select('*')
             .eq('user_id', user.id)
+            .eq('ai_generated', true)  // Only show AI-generated tasks
             .in('university_id', lockedUniversityIds)
             .order('created_at', { ascending: false })
 
@@ -141,173 +143,143 @@ export default function ApplicationGuidance() {
 
     if (!hasLockedUniversities) {
         return (
-            <div className="bg-gradient-to-br from-card via-card to-primary/5 rounded-xl p-8 shadow-md border border-primary/10">
-                <div className="text-center space-y-4">
-                    <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
-                        <Lock className="w-8 h-8 text-primary" />
+            <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center bg-gradient-to-br from-background via-background to-primary/5 rounded-[2rem] border border-primary/10 shadow-2xl shadow-primary/5">
+                <div className="relative mb-6">
+                    <motion.div
+                        animate={{ scale: [1, 1.1, 1] }}
+                        transition={{ repeat: Infinity, duration: 4 }}
+                        className="absolute -inset-4 bg-primary/20 rounded-full blur-2xl"
+                    />
+                    <div className="relative w-20 h-20 bg-background border border-primary/20 rounded-3xl flex items-center justify-center shadow-xl rotate-3">
+                        <Lock className="w-10 h-10 text-primary" />
                     </div>
-                    <h3 className="font-bold text-lg">Application Guidance Locked</h3>
-                    <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                        Lock a university from the AI Counsellor chat to unlock personalized application guidance,
-                        required documents, timeline, and AI-generated tasks.
-                    </p>
                 </div>
+                <h3 className="text-2xl font-bold mb-3">Guidance Locked</h3>
+                <p className="text-muted-foreground max-w-md mx-auto leading-relaxed">
+                    Lock a university in the <span className="text-primary font-semibold">AI Chat</span> to unlock your personalized application timeline, document checklist, and automated tasks.
+                </p>
             </div>
         )
     }
 
     return (
-        <div className="space-y-6">
-            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent rounded-xl p-6 border border-primary/20">
-                <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
-                        <GraduationCap className="w-5 h-5 text-primary" />
-                    </div>
-                    <h2 className="font-bold text-xl">Application Guidance</h2>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                    You have {lockedUniversityIds.length} {lockedUniversityIds.length === 1 ? 'university' : 'universities'} locked.
-                    Track your application progress below.
-                </p>
-            </div>
-
-            {lockedUniversities.map((uni) => {
-                const tasksByCategory = getTasksByCategory(uni.university_id)
-                const totalTasks = tasks.filter(t => t.university_id === uni.university_id).length
-                const completedTasks = tasks.filter(t => t.university_id === uni.university_id && t.status === 'completed').length
-                const progress = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0
-                const isExpanded = expandedUni === uni.university_id
-
-                return (
-                    <motion.div
-                        key={uni.university_id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-card rounded-xl shadow-lg border border-primary/10 overflow-hidden"
-                    >
-                        {/* University Header */}
-                        <div className="p-6 bg-gradient-to-br from-background via-background to-primary/5">
-                            <div className="flex items-start justify-between mb-4">
-                                <div className="flex-1">
-                                    <h3 className="font-bold text-lg mb-1">{uni.name}</h3>
-                                    <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                                        <span>📍</span> {uni.country}
-                                    </p>
-                                </div>
-                                <button
-                                    onClick={() => unlockUniversity(uni.university_id, uni.name)}
-                                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-colors flex items-center gap-1.5 border border-red-500/20"
-                                >
-                                    <Unlock className="w-3.5 h-3.5" />
-                                    Unlock
-                                </button>
+        <div className="space-y-8 pb-10">
+            {/* Page Header */}
+            <header className="relative overflow-hidden bg-gradient-to-br from-background via-background to-primary/5 rounded-[2rem] p-8 border border-primary/10 shadow-2xl shadow-primary/5">
+                <div className="relative z-10 flex items-center justify-between">
+                    <div>
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="bg-primary/10 p-2.5 rounded-xl text-primary border border-primary/20">
+                                <GraduationCap className="w-6 h-6" />
                             </div>
-
-                            {/* Progress Bar */}
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between text-sm">
-                                    <span className="text-muted-foreground">Progress</span>
-                                    <span className="font-semibold">{completedTasks}/{totalTasks} tasks completed</span>
-                                </div>
-                                <div className="h-2 bg-muted/50 rounded-full overflow-hidden">
-                                    <motion.div
-                                        initial={{ width: 0 }}
-                                        animate={{ width: `${progress}%` }}
-                                        transition={{ duration: 0.5 }}
-                                        className="h-full bg-gradient-to-r from-primary to-primary/80"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Toggle Button */}
-                            <button
-                                onClick={() => setExpandedUni(isExpanded ? null : uni.university_id)}
-                                className="mt-4 w-full py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium transition-colors"
-                            >
-                                {isExpanded ? 'Hide Tasks' : 'View Tasks & Timeline'}
-                            </button>
+                            <h2 className="text-3xl font-bold tracking-tight">Application Guidance</h2>
                         </div>
+                        <p className="text-muted-foreground">
+                            You are tracking <span className="text-primary font-bold">{lockedUniversityIds.length}</span> {lockedUniversityIds.length === 1 ? 'university' : 'universities'}.
+                        </p>
+                    </div>
 
-                        {/* Expandable Tasks Section */}
-                        <AnimatePresence>
-                            {isExpanded && (
-                                <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    transition={{ duration: 0.3 }}
-                                    className="border-t border-primary/10"
-                                >
-                                    <div className="p-6 space-y-6">
-                                        {/* Required Documents */}
-                                        {tasksByCategory.documentation.length > 0 && (
-                                            <div>
-                                                <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold mb-3 border ${getCategoryColor('documentation')}`}>
-                                                    {getCategoryIcon('documentation')}
-                                                    Required Documents
-                                                </div>
-                                                <div className="space-y-2">
-                                                    {tasksByCategory.documentation.map(task => (
-                                                        <TaskItem key={task.id} task={task} onToggle={toggleTask} />
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
+                </div>
+            </header>
 
-                                        {/* Test Preparation */}
-                                        {tasksByCategory.test_prep.length > 0 && (
-                                            <div>
-                                                <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold mb-3 border ${getCategoryColor('test_prep')}`}>
-                                                    {getCategoryIcon('test_prep')}
-                                                    Test Preparation
-                                                </div>
-                                                <div className="space-y-2">
-                                                    {tasksByCategory.test_prep.map(task => (
-                                                        <TaskItem key={task.id} task={task} onToggle={toggleTask} />
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
+            {/* University List */}
+            <div className="space-y-6">
+                {lockedUniversities.map((uni) => {
+                    const tasksByCategory = getTasksByCategory(uni.university_id)
+                    const isExpanded = expandedUni === uni.university_id
+                    const totalTasks = tasks.filter(t => t.university_id === uni.university_id).length
+                    const completedTasks = tasks.filter(t => t.university_id === uni.university_id && t.status === 'completed').length
+                    const progress = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0
 
-                                        {/* Application Tasks */}
-                                        {tasksByCategory.application.length > 0 && (
-                                            <div>
-                                                <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold mb-3 border ${getCategoryColor('application')}`}>
-                                                    {getCategoryIcon('application')}
-                                                    Application Forms
-                                                </div>
-                                                <div className="space-y-2">
-                                                    {tasksByCategory.application.map(task => (
-                                                        <TaskItem key={task.id} task={task} onToggle={toggleTask} />
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
+                    return (
+                        <motion.div
+                            key={uni.university_id}
+                            layout
+                            className="group bg-card rounded-[2rem] shadow-xl border border-primary/10 overflow-hidden transition-all hover:shadow-primary/5"
+                        >
+                            {/* University Header Section */}
+                            <div className="p-8">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                                    <div className="flex items-center gap-5">
 
-                                        {/* Research Tasks */}
-                                        {tasksByCategory.research.length > 0 && (
-                                            <div>
-                                                <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold mb-3 border ${getCategoryColor('research')}`}>
-                                                    {getCategoryIcon('research')}
-                                                    Research & Planning
-                                                </div>
-                                                <div className="space-y-2">
-                                                    {tasksByCategory.research.map(task => (
-                                                        <TaskItem key={task.id} task={task} onToggle={toggleTask} />
-                                                    ))}
-                                                </div>
+                                        <div>
+                                            <h3 className="text-xl font-bold mb-1 group-hover:text-primary transition-colors">{uni.name}</h3>
+                                            <div className="flex items-center gap-3 text-sm text-muted-foreground font-medium">
+                                                <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {uni.country}</span>
+                                                <span className="w-1 h-1 bg-muted-foreground/30 rounded-full" />
+                                                <span className="text-primary/80 uppercase tracking-tighter text-[10px] font-bold">Fall 2026 Intake</span>
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </motion.div>
-                )
-            })}
+
+                                    <div className="flex items-center gap-3">
+                                        <button
+                                            onClick={() => unlockUniversity(uni.university_id, uni.name)}
+                                            className="p-2.5 rounded-xl text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-all border border-transparent hover:border-red-500/20"
+                                            title="Unlock University"
+                                        >
+                                            <Unlock className="w-5 h-5" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Shared Progress Bar */}
+                                <div className="mt-8 space-y-3">
+                                    <div className="flex items-center justify-between text-xs font-bold uppercase tracking-widest text-muted-foreground/60 px-1">
+                                        <span>Application Readiness</span>
+                                        <span className="text-primary">{Math.round(progress)}% Complete</span>
+                                    </div>
+                                    <div className="h-3 bg-muted/30 rounded-full overflow-hidden border border-primary/5">
+                                        <motion.div
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${progress}%` }}
+                                            className="h-full bg-gradient-to-r from-primary via-primary to-blue-400 shadow-[0_0_12px_rgba(var(--primary),0.3)]"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Task Breakdown */}
+                            <AnimatePresence>
+                                {isExpanded && (
+                                    <motion.div
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: 'auto', opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        className="border-t border-primary/10 bg-muted/20 backdrop-blur-sm"
+                                    >
+                                        <div className="p-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                            {/* We iterate categories dynamically to save code */}
+                                            {['documentation', 'test_prep', 'application', 'research'].map((cat) => {
+                                                const catTasks = tasksByCategory[cat as keyof typeof tasksByCategory];
+                                                if (!catTasks || catTasks.length === 0) return null;
+
+                                                return (
+                                                    <div key={cat} className="space-y-4">
+                                                        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${getCategoryColor(cat)}`}>
+                                                            {getCategoryIcon(cat)}
+                                                            {cat.replace('_', ' ')}
+                                                        </div>
+                                                        <div className="space-y-3">
+                                                            {catTasks.map(task => (
+                                                                <TaskItem key={task.id} task={task} onToggle={toggleTask} />
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </motion.div>
+                    )
+                })}
+            </div>
         </div>
     )
 }
+
 
 function TaskItem({ task, onToggle }: { task: Task; onToggle: (id: string, status: string) => void }) {
     return (

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { signout } from '@/app/auth/actions'
-import { LayoutDashboard, GraduationCap, CheckSquare, MessageSquare, LogOut, User } from 'lucide-react'
+import { LayoutDashboard, GraduationCap, CheckSquare, MessageSquare, LogOut, User, Sparkles } from 'lucide-react'
 import { ModeToggle } from '@/components/mode-toggle'
 import { useUniversityLocks } from '@/app/hooks/useUniversityLocks'
 import { usePathname } from 'next/navigation'
@@ -65,6 +65,26 @@ export default function DashboardLayout({
                         <MessageSquare className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
                         AI Counsellor
                     </Link>
+
+                    <Link
+                        href="/dashboard/universities"
+                        className={`flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-muted/50 rounded-xl transition-all group ${pathname === '/dashboard/universities' ? 'bg-muted/50 text-primary' : ''
+                            }`}
+                    >
+                        <GraduationCap className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                        Universities
+                    </Link>
+
+                    {hasLockedUniversities && (
+                        <Link
+                            href="/dashboard/ai-guidance"
+                            className={`flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-muted/50 rounded-xl transition-all group ${pathname === '/dashboard/ai-guidance' ? 'bg-muted/50 text-primary' : ''
+                                }`}
+                        >
+                            <Sparkles className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                            AI Guidance
+                        </Link>
+                    )}
                 </nav>
 
                 <div className="border-t border-border/50 pt-6 space-y-2">
@@ -77,9 +97,7 @@ export default function DashboardLayout({
                         Profile
                     </Link>
 
-                    <div className="px-2">
-                        <ModeToggle />
-                    </div>
+                    <ModeToggle />
 
                     <form action={signout}>
                         <button className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground w-full hover:bg-muted/50 rounded-xl transition-all">
@@ -91,7 +109,7 @@ export default function DashboardLayout({
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 overflow-y-auto">
+            <main className="flex-1 overflow-y-auto scrollbar-hide">
                 {children}
             </main>
         </div>

@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { UserProfile } from '@/types/profile'
 import { useRouter } from 'next/navigation'
-import { Send, Sparkles, Mic, MicOff } from 'lucide-react'
+import { toast } from 'sonner'
+import { Send, Sparkles, User, Bot, Mic, MicOff } from 'lucide-react'
 
 export default function OnboardingChat({ initialProfile }: { initialProfile: UserProfile | null }) {
     const router = useRouter()
@@ -90,7 +91,9 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
     const toggleListening = () => {
         if (!recognition) {
             console.error('🎤 [Voice] Speech recognition not supported')
-            alert('Speech recognition is not supported in your browser. Please use Chrome or Edge.')
+            toast.error('Speech recognition not supported', {
+                description: 'Please use Chrome or Edge browser for voice input'
+            })
             return
         }
 
@@ -117,7 +120,7 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
         }
 
         const userMessage: UIMessage = {
-            id: `user-${Date.now()}`,
+            id: `user - ${Date.now()} `,
             role: 'user',
             content: messageText,
         }
@@ -145,7 +148,7 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
                 setMessages((m) => [
                     ...m,
                     {
-                        id: `assistant-${Date.now()}`,
+                        id: `assistant - ${Date.now()} `,
                         role: 'assistant',
                         content: json.assistantText,
                         metadata: json.error
@@ -163,7 +166,7 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
                 setMessages((m) => [
                     ...m,
                     {
-                        id: `assistant-error-${Date.now()}`,
+                        id: `assistant - error - ${Date.now()} `,
                         role: 'assistant',
                         content: '⚠️ Something went wrong. Please try again.',
                         metadata: { error: true },
@@ -174,7 +177,7 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
             setMessages((m) => [
                 ...m,
                 {
-                    id: `assistant-network-${Date.now()}`,
+                    id: `assistant - network - ${Date.now()} `,
                     role: 'assistant',
                     content: '🚫 Network or server error. Please retry.',
                     metadata: { error: true },
@@ -201,7 +204,7 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
         setMessages((cur) => {
             const next = [...cur];
             next.push({
-                id: `assistant-${Date.now()}`,
+                id: `assistant - ${Date.now()} `,
                 role: 'assistant',
                 content: assistantText,
                 toolInvocations: toolInvocations.map((t) => ({
@@ -218,7 +221,7 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
     // When you call the API (debug mode), do:
     const handleStart = async () => {
         const userMessage: UIMessage = {
-            id: `user-start-${Date.now()}`,
+            id: `user - start - ${Date.now()} `,
             role: 'user',
             content: 'Hi, I am ready to start.',
         }
@@ -245,7 +248,7 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
                 setMessages((m) => [
                     ...m,
                     {
-                        id: `assistant-start-${Date.now()}`,
+                        id: `assistant - start - ${Date.now()} `,
                         role: 'assistant',
                         content: json.assistantText,
                     },
@@ -261,7 +264,7 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
             setMessages((m) => [
                 ...m,
                 {
-                    id: `assistant-error-${Date.now()}`,
+                    id: `assistant - error - ${Date.now()} `,
                     role: 'assistant',
                     content: '⚠️ Unable to start onboarding right now.',
                     metadata: { error: true },
@@ -331,13 +334,13 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
                                 initial={{ opacity: 0, y: 20, scale: 0.95 }}
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                 transition={{ duration: 0.3, ease: "easeOut" }}
-                                className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} `}
                             >
                                 <div
-                                    className={`max-w-[85%] sm:max-w-[75%] rounded-3xl px-6 py-4 text-md leading-relaxed backdrop-blur-md ${m.role === 'user'
-                                        ? 'bg-gradient-to-br from-primary/90 to-primary text-primary-foreground ml-12 rounded-tr-md shadow-lg shadow-primary/20'
-                                        : 'bg-muted/60 text-foreground mr-12 rounded-tl-md shadow-lg shadow-black/5 border border-primary/5 whitespace-pre-line'
-                                        }`}
+                                    className={`max - w - [85 %] sm: max - w - [75 %] rounded - 3xl px - 6 py - 4 text - md leading - relaxed backdrop - blur - md ${m.role === 'user'
+                                            ? 'bg-gradient-to-br from-primary/90 to-primary text-primary-foreground ml-12 rounded-tr-md shadow-lg shadow-primary/20'
+                                            : 'bg-muted/60 text-foreground mr-12 rounded-tl-md shadow-lg shadow-black/5 border border-primary/5 whitespace-pre-line'
+                                        } `}
                                 >
                                     <p className={m.metadata?.error ? 'text-red-500 italic' : ''}> {m.content} </p>
 
@@ -384,12 +387,12 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
                     <button
                         type="button"
                         onClick={toggleListening}
-                        className={`absolute right-14 top-1/2 -translate-y-1/2 p-2 rounded-full transition-all ${isListening
-                            ? 'bg-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse'
-                            : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
+                        className={`absolute right - 14 top - 1 / 2 - translate - y - 1 / 2 p - 2 rounded - full transition - all ${isListening
+                                ? 'bg-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse'
+                                : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
 
 
-                            }`}
+                            } `}
                         title={isListening ? "Stop recording" : "Start voice input"}
                     >
                         {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}

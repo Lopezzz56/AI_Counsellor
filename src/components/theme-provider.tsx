@@ -7,5 +7,14 @@ export function ThemeProvider({
     children,
     ...props
 }: React.ComponentProps<typeof NextThemesProvider>) {
-    return <NextThemesProvider {...props}>{children}</NextThemesProvider>
+    return (
+        <NextThemesProvider 
+            attribute="class"    // This is the critical missing line
+            defaultTheme="system" // Optional: starts with system theme
+            enableSystem         // Optional: allows laptop to override
+            {...props}
+        >
+            {children}
+        </NextThemesProvider>
+    )
 }

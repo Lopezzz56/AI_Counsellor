@@ -22,6 +22,7 @@ export function useUniversityLocks() {
         .from('user_university_locks')
         .select('university_id')
         .eq('user_id', user.id)
+        .eq('status', 'locked')
 
       if (error) throw error
 

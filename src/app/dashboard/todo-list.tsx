@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Check, CheckSquare } from 'lucide-react'
+import { Check, CheckSquare, ArrowRight } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
+import Link from 'next/link'
 
 export default function ToDoList() {
     const [tasks, setTasks] = useState<any[]>([])
@@ -17,7 +18,10 @@ export default function ToDoList() {
             .from('tasks')
             .select('*')
             .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
+            .eq('status', 'pending') // Only show pending tasks
+            .order('priority', { ascending: true }) // Lower number = higher priority
+            .order('due_date', { ascending: true, nullsFirst: false })
+            .limit(5) // Top 5 only
 
         setTasks(data || [])
     }
@@ -49,12 +53,15 @@ export default function ToDoList() {
             // Revert on error
             setTasks(prev => prev.map(t => t.id === id ? { ...t, status: currentStatus } : t))
             console.error('Failed to update task:', error)
+        } else {
+            // Dispatch event for progress updates
+            window.dispatchEvent(new CustomEvent('task-updated', { detail: { taskId: id, status: newStatus } }))
         }
 
         setIsUpdating(null)
     }
 
-return (
+    return (
         <div className="bg-gradient-to-br from-background via-background to-primary/5 rounded-[2rem] p-6 border border-primary/10 shadow-2xl shadow-primary/5 h-full transition-all hover:shadow-primary/10">
             <h3 className="font-bold text-lg mb-6 flex items-center gap-3">
                 <span className="bg-primary shadow-[0_0_15px_rgba(var(--primary),0.3)] p-2 rounded-xl text-primary-foreground">
@@ -90,6 +97,16 @@ return (
                     </div>
                 ))}
             </div>
+
+            {tasks.length > 0 && (
+                <Link
+                    href="/dashboard/tasks"
+                    className="mt-4 flex items-center justify-center gap-2 text-sm text-primary hover:text-primary/80 font-medium transition-colors group"
+                >
+                    View All Tasks
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </Link>
+            )}
         </div>
     )
 }

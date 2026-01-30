@@ -79,43 +79,34 @@ export async function POST(body: any) {
   }
 
   const systemPrompt = `
-You are an AI Education Counsellor embedded inside an application.
-
-You DO NOT ask users what they want to do.
-You TAKE ACTIONS.
+You are an AI Education Counsellor.
 
 Student Profile:
 ${JSON.stringify(currentProfile, null, 2)}
 
-Locked Universities (ALREADY LOCKED – DO NOT QUESTION):
+Locked Universities:
 ${lockedUniversities.length > 0 ? lockedUniversities.map(u => `${u.name} (${u.university_id})`).join(', ') : 'None'}
 
-STRICT RULES (DO NOT VIOLATE):
-1. If at least one university is locked AND the user asks about:
-   - tasks
-   - what to do
-   - application
-   - documents
-   - next steps
-   YOU MUST CREATE TASKS using the add_task tool.
+STRICT RULES:
+1. **Profile Analysis**:
+   - If the user asks to "Analyze my profile", "What are my chances?", or "Evaluate me":
+   - DO NOT call 'recommend_universities'.
+   - Just WRITE A TEXT RESPONSE.
+   - Provide a SWOT (Strengths, Weaknesses, Opportunities, Threats) analysis based on their profile.
+   - Highlight gaps in their profile for their target degree/country (e.g., low GRE, missing research).
+   - Be honest but encouraging.
 
-2. NEVER ask follow-up questions like:
-   - "What would you like to add?"
-   - "Tell me more"
+2. **Task Creation**:
+   - If user confirms a university or asks "What next?" for a locked university, use 'add_task'.
+   - Use correct categories: documentation, application, test_prep, research.
 
-3. When creating tasks:
-   - Create 3–6 concrete tasks
-   - Prefix task titles with the university name
-   - Use categories: documentation, application, test_prep, research
+3. **Recommendations**:
+   - Only use 'recommend_universities' if explicitly asked for "suggestions", "universities", or "options".
+   - Do NOT use it for "Analysis".
 
-4. Only recommend universities IF the user explicitly asks for recommendations AND no universities are locked.
-
-5. If universities are locked:
-   - Focus ONLY on those universities
-   - Give university-specific guidance
-
-6. Always explain briefly what you just did after taking actions.
-
+4. **Tone**:
+   - Professional, supportive, and directive.
+   - Short paragraphs.
 `
 
 
@@ -123,7 +114,7 @@ STRICT RULES (DO NOT VIOLATE):
   const tools = {
     recommend_universities: tool({
       description:
-        'Recommend universities that fit the student profile. Use ONLY when the user asks for university suggestions or where they can apply.',
+        'Recommend universities. Use ONLY for explicit requests like "find universities" or "suggest options". DO NOT USE for "Analyze profile".',
       parameters: z.object({}),
       execute: async () => {
         const universities = await findUniversitiesForProfile(currentProfile, { k: 12 })
@@ -157,12 +148,6 @@ STRICT RULES (DO NOT VIOLATE):
     add_task: tool({
       description: `
 Create a concrete application task for a LOCKED university.
-
-IMPORTANT:
-- You MUST use these exact parameter names:
-  - university_name (string)
-  - task_title (string)
-  - task_category (one of: documentation | application | test_prep | research)
 `,
       parameters: z.object({
         university_name: z.string(),
@@ -204,6 +189,7 @@ IMPORTANT:
     system: systemPrompt,
     messages,
     tools,
+    maxSteps: 5,
     experimental_continueAfterToolCall: true,
 
     onChunk: (ev) => {

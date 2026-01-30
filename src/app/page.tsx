@@ -41,7 +41,7 @@ export default async function Home() {
             href="/signup"
             className="border border-input px-8 py-4 rounded-lg font-medium hover:bg-muted transition-colors"
           >
-            Create Free Account
+            Get Started
           </Link>
         </div>
       </section>

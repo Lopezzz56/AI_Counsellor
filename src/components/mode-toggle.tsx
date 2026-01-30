@@ -1,36 +1,52 @@
 "use client"
 
 import * as React from "react"
-import { Moon, Sun } from "lucide-react"
+import { Moon, Sun, Monitor } from "lucide-react"
 import { useTheme } from "next-themes"
 
 export function ModeToggle() {
     const { setTheme, theme } = useTheme()
     const [mounted, setMounted] = React.useState(false)
 
-    // Avoid hydration mismatch
     React.useEffect(() => {
         setMounted(true)
     }, [])
 
     if (!mounted) {
         return (
-            <div className="p-2 rounded-md flex items-center gap-2 text-muted-foreground w-[100px] h-[36px]">
-                <span className="text-sm font-medium">Theme</span>
+            <div className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-muted-foreground w-full">
+                <div className="h-5 w-5 rounded-md bg-muted animate-pulse" />
+                <span>Theme</span>
             </div>
         )
     }
 
+    const isDark = theme === 'dark'
+
     return (
         <button
-            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-            className="relative p-2 rounded-md hover:bg-muted transition-colors flex items-center gap-2 text-muted-foreground hover:text-foreground w-full"
+            onClick={() => setTheme(isDark ? 'light' : 'dark')}
+            className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground w-full hover:bg-muted/50 rounded-xl transition-all group"
             aria-label="Toggle theme"
         >
-            <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute left-2 h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-            <span className="sr-only">Toggle theme</span>
-            <span className="text-sm font-medium capitalize">{theme === 'light' ? 'Light' : 'Dark'}</span>
+            <div className="relative h-5 w-5 flex items-center justify-center overflow-hidden">
+                {/* Sun Icon: Slides up when dark */}
+                <Sun 
+                    className={`h-5 w-5 transition-all duration-500 absolute ${
+                        isDark ? "-translate-y-10 opacity-0" : "translate-y-0 opacity-100"
+                    } group-hover:text-yellow-500`} 
+                />
+                {/* Moon Icon: Slides up from bottom when dark */}
+                <Moon 
+                    className={`h-5 w-5 transition-all duration-500 absolute ${
+                        isDark ? "translate-y-0 opacity-100" : "translate-y-10 opacity-0"
+                    } group-hover:text-blue-400`} 
+                />
+            </div>
+            
+            <span className="capitalize transition-all">
+                {isDark ? 'Dark Mode' : 'Light Mode'}
+            </span>
         </button>
     )
 }

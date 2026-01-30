@@ -5,6 +5,7 @@ import { UserProfile } from '@/types/profile'
 import { updateProfile } from '@/app/actions/update-profile'
 import { Edit2, Save, X, GraduationCap, Globe, Wallet, Award, Check } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 export default function EditableProfile({ profile }: { profile: UserProfile }) {
     return (
@@ -80,8 +81,11 @@ function Section({ title, icon, data, sectionKey, fields }: any) {
         if (res.success) {
             setIsEditing(false)
             router.refresh()
+            toast.success('Profile updated successfully')
         } else {
-            alert('Failed to update: ' + res.error)
+            toast.error('Failed to update profile', {
+                description: res.error || 'Please try again'
+            })
         }
     }
 

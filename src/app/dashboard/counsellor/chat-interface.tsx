@@ -5,6 +5,8 @@ import { UserProfile } from '@/types/profile'
 import { Send, Sparkles, User, Bot, Mic, MicOff } from 'lucide-react'
 import { RecommendedUniversity } from '@/types/profile'
 import React from 'react'
+import { toast } from 'sonner'
+import { UniversityCard } from '@/components/university-card'
 
 export default function CounsellorChatInterface({ initialProfile }: { initialProfile: UserProfile }) {
     // Manual state management (same pattern as onboarding after debugging)
@@ -44,21 +46,26 @@ You can start by asking:
     const [showRecommendations, setShowRecommendations] = useState(false)
 
     const messagesEndRef = useRef<HTMLDivElement>(null)
-    const [lockedIds, setLockedIds] = useState<string[]>([])
+    const [lockedUniversities, setLockedUniversities] = useState<any[]>([])
 
-    // after component mounts, fetch existing locks for current user (optional)
+    const fetchLocks = async () => {
+        try {
+            const res = await fetch('/api/universities/lock')
+            if (res.ok) {
+                const json = await res.json()
+                setLockedUniversities(json.locks || [])
+            }
+        } catch (e) { console.error(e) }
+    }
+
+    // Initial fetch and event listener
     useEffect(() => {
-        (async () => {
-            try {
-                const res = await fetch('/api/universities/lock') // optional endpoint to return current locks
-                if (res.ok) {
-                    const json = await res.json()
-                    setLockedIds(json.lockedUniversityIds || [])
-                }
-
-            } catch (e) { /* ignore */ }
-        })()
+        fetchLocks()
+        window.addEventListener('university-lock-changed', fetchLocks)
+        return () => window.removeEventListener('university-lock-changed', fetchLocks)
     }, [])
+
+
 
 
     // Initialize speech recognition
@@ -186,6 +193,22 @@ You can start by asking:
                         toolInvocations: json.toolInvocations || [],
                     },
                 ])
+
+                // Handle tool toasts (Imperative UI effect)
+                if (json.toolInvocations) {
+                    json.toolInvocations.forEach((t: any) => {
+                        if (t.toolName === 'add_task' && t.output) {
+                            // Extract pretty name
+                            // output format: "Task created: <University Name> — <Task Title>"
+                            const match = t.output.match(/Task created: (.+?) — (.+)/)
+                            const title = match ? match[2] : t.input.task_title
+
+                            toast.success('Task Added', {
+                                description: title
+                            })
+                        }
+                    })
+                }
             } else {
                 setMessages((m) => [
                     ...m,
@@ -259,7 +282,50 @@ You can start by asking:
 
                                 {/* Bubble */}
                                 <div className="max-w-[75%] rounded-3xl px-5 py-3.5 bg-muted/60">
-                                    <p className="whitespace-pre-wrap">{m.content}</p>
+                                    <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                                        {m.role === 'assistant' ? (
+                                            // Simple Markdown Parser
+                                            m.content.split('\n').map((line, i) => {
+                                                // Header-ish (Bold line)
+                                                if (line.match(/^\*\*.+\*\*$/) || line.startsWith('###')) {
+                                                    return <p key={i} className="font-bold text-base mt-3 mb-1">{line.replace(/\*\*/g, '').replace(/^### /, '')}</p>
+                                                }
+                                                // Bullet point
+                                                if (line.trim().startsWith('* ') || line.trim().startsWith('- ')) {
+                                                    const content = line.trim().substring(2);
+                                                    // Handle bolding within bullet
+                                                    const parts = content.split(/(\*\*.*?\*\*)/g);
+                                                    return (
+                                                        <div key={i} className="flex gap-2 ml-1 my-1">
+                                                            <span className="text-primary mt-1.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                                                            <p className="flex-1">
+                                                                {parts.map((p, j) => {
+                                                                    if (p.startsWith('**') && p.endsWith('**')) {
+                                                                        return <strong key={j} className="text-foreground">{p.slice(2, -2)}</strong>
+                                                                    }
+                                                                    return p;
+                                                                })}
+                                                            </p>
+                                                        </div>
+                                                    )
+                                                }
+                                                // Regular paragraph with potential bolding
+                                                const parts = line.split(/(\*\*.*?\*\*)/g);
+                                                return (
+                                                    <p key={i} className={line.trim() === '' ? 'h-2' : 'mb-1'}>
+                                                        {parts.map((p, j) => {
+                                                            if (p.startsWith('**') && p.endsWith('**')) {
+                                                                return <strong key={j}>{p.slice(2, -2)}</strong>
+                                                            }
+                                                            return p;
+                                                        })}
+                                                    </p>
+                                                )
+                                            })
+                                        ) : (
+                                            <p>{m.content}</p>
+                                        )}
+                                    </div>
 
                                     {/* SMALL tool status */}
                                     {m.toolInvocations?.map((t, idx) => {
@@ -287,129 +353,68 @@ You can start by asking:
                                         className="mt-6 w-full"
                                     >
                                         {/* Section Header */}
-                                        <div className="mb-4 flex items-center gap-2">
-                                            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
-                                            <span className="text-xs font-medium text-primary/80 px-3 py-1 rounded-full bg-primary/10 backdrop-blur-sm border border-primary/20">
-                                                🎓 Recommended Universities
-                                            </span>
-                                            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+                                        <div className="mb-4 flex items-center gap-2 justify-between">
+                                            <div className="flex items-center gap-2 flex-1">
+                                                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+                                                <span className="text-xs font-medium text-primary/80 px-3 py-1 rounded-full bg-primary/10 backdrop-blur-sm border border-primary/20">
+                                                    🎓 Recommended Universities
+                                                </span>
+                                                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+                                            </div>
+
+                                            <button
+                                                onClick={async () => {
+                                                    const unis = t.output;
+                                                    if (!Array.isArray(unis)) return;
+
+                                                    toast.loading(`Shortlisting ${unis.length} universities...`)
+                                                    let successCount = 0;
+
+                                                    await Promise.all(unis.map(async (u: any) => {
+                                                        try {
+                                                            const res = await fetch('/api/universities/lock', {
+                                                                method: 'POST',
+                                                                headers: { 'Content-Type': 'application/json' },
+                                                                body: JSON.stringify({
+                                                                    university_id: u.university_id,
+                                                                    action: 'shortlist'
+                                                                })
+                                                            })
+                                                            if (res.ok) successCount++;
+                                                        } catch (e) { console.error(e) }
+                                                    }))
+
+                                                    toast.dismiss()
+                                                    toast.success(`Shortlisted ${successCount} universities`)
+                                                    fetchLocks() // Refresh status
+                                                    window.dispatchEvent(new Event('university-lock-changed'))
+                                                }}
+                                                className="text-[10px] font-bold uppercase tracking-wider text-primary border border-primary/20 px-2 py-1 rounded hover:bg-primary/10 transition-colors"
+                                            >
+                                                Shortlist All
+                                            </button>
                                         </div>
 
                                         {/* Horizontal Scroll Container */}
                                         <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent hover:scrollbar-thumb-primary/50 -mx-2 px-2">
                                             {t.output.map((u: any) => {
-                                                const isLocked = lockedIds.includes(u.university_id)
+                                                const lockStatus = lockedUniversities.find(l => l.university_id === u.university_id)?.status
+
+                                                // Clone to avoid mutating original tool output permanently if that matters, 
+                                                // but for UI it's fine. 
+                                                // We construct the object expected by UniversityCard
+
+                                                const uniWithStatus = {
+                                                    ...u,
+                                                    status: lockStatus || undefined
+                                                }
 
                                                 return (
-                                                    <motion.div
+                                                    <UniversityCard
                                                         key={`uni-${u.university_id}`}
-                                                        initial={{ opacity: 0, scale: 0.95 }}
-                                                        animate={{ opacity: 1, scale: 1 }}
-                                                        whileHover={{ scale: 1.02, y: -4 }}
-                                                        transition={{ duration: 0.2 }}
-                                                        className="group relative rounded-2xl overflow-hidden bg-gradient-to-br from-background via-background to-primary/5 backdrop-blur-xl border border-primary/20 shadow-lg shadow-black/10 hover:shadow-xl hover:shadow-primary/20 hover:border-primary/40 min-w-[320px] max-w-[320px] md:min-w-[380px] md:max-w-[380px] snap-start shrink-0"
-                                                    >
-                                                        {/* Image with Overlay */}
-                                                        <div className="relative h-44 overflow-hidden">
-                                                            <img
-                                                                src={u.image_url?.startsWith('http') ? u.image_url : '/placeholder-uni.jpg'}
-                                                                alt={u.name}
-                                                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                                            />
-                                                            {/* Gradient Overlay */}
-                                                            <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/40 to-transparent" />
-
-                                                            {/* Bucket Badge */}
-                                                            <div className="absolute top-3 right-3">
-                                                                <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-primary/90 text-primary-foreground backdrop-blur-md shadow-lg border border-primary/30">
-                                                                    {u.bucket}
-                                                                </span>
-                                                            </div>
-
-                                                            {/* Lock Status Badge */}
-                                                            {isLocked && (
-                                                                <div className="absolute top-3 left-3">
-                                                                    <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-green-600/90 text-white backdrop-blur-md shadow-lg border border-green-500/30 flex items-center gap-1">
-                                                                        ✓ Locked
-                                                                    </span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-
-                                                        {/* Content */}
-                                                        <div className="p-5 space-y-3">
-                                                            {/* University Name */}
-                                                            <h3 className="font-bold text-base text-foreground line-clamp-2 group-hover:text-primary transition-colors">
-                                                                {u.name}
-                                                            </h3>
-
-                                                            {/* Location */}
-                                                            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                                                                <span className="text-primary">📍</span>
-                                                                {u.city}, {u.country}
-                                                            </p>
-
-                                                            {/* Acceptance Chance */}
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="flex-1 h-2 bg-muted/50 rounded-full overflow-hidden backdrop-blur-sm">
-                                                                    <div
-                                                                        className={`h-full rounded-full transition-all duration-500 ${u.acceptanceChance?.includes('High')
-                                                                            ? 'bg-gradient-to-r from-green-500 to-green-600 w-4/5'
-                                                                            : u.acceptanceChance?.includes('Medium')
-                                                                                ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 w-3/5'
-                                                                                : 'bg-gradient-to-r from-red-500 to-red-600 w-2/5'
-                                                                            }`}
-                                                                    />
-                                                                </div>
-                                                                <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-                                                                    {u.acceptanceChance}
-                                                                </span>
-                                                            </div>
-
-                                                            {/* Why Section */}
-                                                            <p className="text-sm text-foreground/80 leading-relaxed line-clamp-3">
-                                                                {u.why}
-                                                            </p>
-
-                                                            {/* Risks */}
-                                                            {u.risks && (
-                                                                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 backdrop-blur-sm">
-                                                                    <p className="text-xs text-red-600 dark:text-red-400 flex items-start gap-2">
-                                                                        <span className="text-sm shrink-0">⚠️</span>
-                                                                        <span className="leading-relaxed">{u.risks}</span>
-                                                                    </p>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Lock Button */}
-                                                            <button
-                                                                onClick={async () => {
-                                                                    await fetch('/api/universities/lock', {
-                                                                        method: 'POST',
-                                                                        headers: { 'Content-Type': 'application/json' },
-                                                                        body: JSON.stringify({
-                                                                            university_id: u.university_id,
-                                                                            action: isLocked ? 'unlock' : 'lock',
-                                                                        }),
-                                                                    })
-
-                                                                    setLockedIds(prev =>
-                                                                        isLocked
-                                                                            ? prev.filter(id => id !== u.university_id)
-                                                                            : [...prev, u.university_id]
-                                                                    )
-                                                                    window.dispatchEvent(new Event('university-lock-changed'))
-
-                                                                }}
-                                                                className={`w-full mt-2 rounded-xl py-3 text-sm font-semibold transition-all duration-300 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 ${isLocked
-                                                                    ? 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800'
-                                                                    : 'bg-gradient-to-r from-primary to-primary/90 text-primary-foreground hover:from-primary/90 hover:to-primary'
-                                                                    }`}
-                                                            >
-                                                                {isLocked ? '✓ Locked - Click to Unlock' : '🔒 Lock this University'}
-                                                            </button>
-                                                        </div>
-                                                    </motion.div>
+                                                        university={uniWithStatus}
+                                                        onLockToggle={fetchLocks}
+                                                    />
                                                 )
                                             })}
                                         </div>

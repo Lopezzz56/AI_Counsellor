@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { supabaseAdmin } from '@/utils/supabase/admin'
 import { createClient } from '@/utils/supabase/server'
+import { generateUniversityTasks } from '@/utils/tasks/generateUniversityTasks'
 
 
 /**
@@ -36,178 +37,138 @@ export async function POST(req: Request) {
 
     try {
         if (action === 'lock') {
-            // 1) insert lock (unique index avoids duplicates)
-            const { data: lock, error: lockErr } = await supabase
+            // 0) Enforce Single Lock: Downgrade any EXISTING locks to 'shortlisted'
+            // We want to allow only ONE locked university at a time.
+            const { error: downgradeError } = await supabaseAdmin
                 .from('user_university_locks')
-                .insert({ user_id: user.id, university_id })
+                .update({ status: 'shortlisted' })
+                .eq('user_id', user.id)
+                .eq('status', 'locked')
+                .neq('university_id', university_id) // Don't downgrade the one we are about to lock (if it was already locked)
+
+            if (downgradeError) {
+                console.warn('[LOCK ROUTE] downgrade error', downgradeError)
+            }
+
+            // 1) Upsert lock with 'locked' status
+            // This handles both new locks AND promoting existing 'shortlisted' records
+            const { data: lock, error: lockErr } = await supabaseAdmin
+                .from('user_university_locks')
+                .upsert(
+                    {
+                        user_id: user.id,
+                        university_id: university_id,
+                        status: 'locked'
+                        // status_changed_at removed as column does not exist
+                    },
+                    { onConflict: 'user_id,university_id' }
+                )
                 .select()
                 .single()
 
             if (lockErr) {
-                // if unique violation, fetch existing lock
-                console.warn('[LOCK ROUTE] lock insert error', lockErr)
-                // try to return existing lock
-                const { data: existing } = await supabase
-                    .from('user_university_locks')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .eq('university_id', university_id)
-                    .single()
-                // continue even if not found
-                // 2) fetch university for titles
-                const { data: uni } = await supabase
-                    .from('universities')
-                    .select('name')
-                    .eq('university_id', university_id)
-                    .single()
-
-                // 3) create AI-generated tasks (only if not already present)
-                const suggestedTasks = [
-                    {
-                        title: `Draft SOP for ${uni?.name ?? university_id}`,
-                        user_id: user.id,
-                        created_by: 'ai',
-                        university_id,
-                        category: 'documentation',
-                        status: 'pending',
-                        description: 'Write a compelling Statement of Purpose highlighting your goals and fit'
-                    },
-                    {
-                        title: `Collect transcripts for ${uni?.name ?? university_id}`,
-                        user_id: user.id,
-                        created_by: 'ai',
-                        university_id,
-                        category: 'documentation',
-                        status: 'pending',
-                        description: 'Gather official academic transcripts from all institutions'
-                    },
-                    {
-                        title: `Prepare language test (IELTS/TOEFL) for ${uni?.name ?? university_id}`,
-                        user_id: user.id,
-                        created_by: 'ai',
-                        university_id,
-                        category: 'test_prep',
-                        status: 'pending',
-                        description: 'Check requirements and schedule your English proficiency test'
-                    },
-                    {
-                        title: `Complete application form for ${uni?.name ?? university_id}`,
-                        user_id: user.id,
-                        created_by: 'ai',
-                        university_id,
-                        category: 'application',
-                        status: 'pending',
-                        description: 'Fill out the university application form with accurate information'
-                    },
-                ]
-
-                // insert only tasks that do not already exist (by exact title)
-                const createdTasks = []
-                for (const t of suggestedTasks) {
-                    const { data: exists } = await supabase
-                        .from('tasks')
-                        .select('id')
-                        .eq('user_id', user.id)
-                        .eq('title', t.title)
-                        .limit(1)
-                    if (!exists || exists.length === 0) {
-                        const { data: created, error: taskErr } = await supabase
-                            .from('tasks')
-                            .insert(t)
-                            .select()
-                            .single()
-                        if (taskErr) console.warn('[LOCK ROUTE] task insert error', taskErr)
-                        else createdTasks.push(created)
-                    }
-                }
-
-                return Response.json({ locked: true, lock: existing ?? null, createdTasks })
+                console.warn('[LOCK ROUTE] lock upsert error', lockErr)
+                throw lockErr
             }
 
-            // If insert success -> create suggested tasks
-            console.log('[LOCK ROUTE] lock inserted', lock)
-
-            // fetch university name for task titles
+            // 2) Fetch university details (if needed for task generation context)
             const { data: uni } = await supabase
                 .from('universities')
-                .select('name')
+                .select('*')
                 .eq('university_id', university_id)
                 .single()
 
-            const suggestedTasks = [
-                {
-                    title: `Draft SOP for ${uni?.name ?? university_id}`,
-                    user_id: user.id,
-                    created_by: 'ai',
-                    university_id,
-                    category: 'documentation',
-                    status: 'pending',
-                    description: 'Write a compelling Statement of Purpose highlighting your goals and fit'
-                },
-                {
-                    title: `Collect transcripts for ${uni?.name ?? university_id}`,
-                    user_id: user.id,
-                    created_by: 'ai',
-                    university_id,
-                    category: 'documentation',
-                    status: 'pending',
-                    description: 'Gather official academic transcripts from all institutions'
-                },
-                {
-                    title: `Prepare language test (IELTS/TOEFL) for ${uni?.name ?? university_id}`,
-                    user_id: user.id,
-                    created_by: 'ai',
-                    university_id,
-                    category: 'test_prep',
-                    status: 'pending',
-                    description: 'Check requirements and schedule your English proficiency test'
-                },
-                {
-                    title: `Complete application form for ${uni?.name ?? university_id}`,
-                    user_id: user.id,
-                    created_by: 'ai',
-                    university_id,
-                    category: 'application',
-                    status: 'pending',
-                    description: 'Fill out the university application form with accurate information'
-                },
-                {
-                    title: `Research program details for ${uni?.name ?? university_id}`,
-                    user_id: user.id,
-                    created_by: 'ai',
-                    university_id,
-                    category: 'research',
-                    status: 'pending',
-                    description: 'Review curriculum, faculty, and program requirements'
-                },
-            ]
+            // 3) Fetch user profile
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single()
 
-            const { data: createdTasks, error: tasksErr } = await supabase
+            // 4) Check if tasks already exist (idempotency check)
+            // We only want to generate tasks if they don't already exist for this uni
+            const { count: existingTaskCount } = await supabase
                 .from('tasks')
-                .insert(suggestedTasks)
-                .select()
-
-            if (tasksErr) console.warn('[LOCK ROUTE] tasks insert error', tasksErr)
-
-            return Response.json({ locked: true, lock, createdTasks })
-        }
-
-        if (action === 'unlock') {
-            // delete lock
-            const { error: delErr } = await supabase
-                .from('user_university_locks')
-                .delete()
+                .select('*', { count: 'exact', head: true })
                 .eq('user_id', user.id)
                 .eq('university_id', university_id)
+                .eq('ai_generated', true)
 
-            if (delErr) {
-                console.warn('[LOCK ROUTE] unlock delete error', delErr)
-                return new Response(JSON.stringify({ error: delErr.message }), { status: 500 })
+            let createdTasks = []
+
+            // Only generate tasks if none exist (or very few)
+            if (!existingTaskCount || existingTaskCount === 0) {
+                try {
+                    createdTasks = await generateUniversityTasks({
+                        supabase: supabaseAdmin, // USE ADMIN CLIENT to bypass RLS on tasks table
+                        userId: user.id,
+                        university: uni,
+                        profile,
+                    })
+                } catch (taskGenError) {
+                    console.warn('[LOCK ROUTE] Task generation error:', taskGenError)
+                }
+            } else {
+                console.log('[LOCK ROUTE] Tasks already exist for this university, skipping generation')
             }
 
-            // remove AI-generated tasks related to this university (only those created_by = 'ai')
-            // requires tasks.university_id column (see migration below).
-            const { data: removed, error: removedErr } = await supabase
+            console.log('[LOCK ROUTE] Lock upserted successfully', lock)
+            return Response.json({
+                locked: true,
+                lock,
+                createdTasks,
+                tasksCount: createdTasks.length,
+                existingTaskCount
+            })
+        }
+
+        if (action === 'shortlist') {
+            // Upsert with 'shortlisted' status
+            const { data: lock, error: lockErr } = await supabaseAdmin
+                .from('user_university_locks')
+                .upsert(
+                    {
+                        user_id: user.id,
+                        university_id: university_id,
+                        status: 'shortlisted'
+                        // status_changed_at removed
+                    },
+                    { onConflict: 'user_id,university_id' }
+                )
+                .select()
+                .single()
+
+            if (lockErr) throw lockErr
+
+            return Response.json({
+                success: true,
+                status: 'shortlisted',
+                lock
+            })
+        }
+
+        // UNLOCK now downgrades to 'shortlisted' instead of deleting
+        if (action === 'unlock') {
+            const { data: lock, error: lockErr } = await supabaseAdmin
+                .from('user_university_locks')
+                .upsert(
+                    {
+                        user_id: user.id,
+                        university_id: university_id,
+                        status: 'shortlisted'
+                    },
+                    { onConflict: 'user_id,university_id' }
+                )
+                .select()
+                .single()
+
+            if (lockErr) {
+                console.warn('[LOCK ROUTE] unlock error', lockErr)
+                return new Response(JSON.stringify({ error: lockErr.message }), { status: 500 })
+            }
+
+            // Remove AI-generated tasks (cleanup)
+            const { data: removed, error: removedErr } = await supabaseAdmin
                 .from('tasks')
                 .delete()
                 .eq('user_id', user.id)
@@ -217,7 +178,23 @@ export async function POST(req: Request) {
 
             if (removedErr) console.warn('[LOCK ROUTE] remove tasks error', removedErr)
 
-            return Response.json({ locked: false, removedTasksCount: (removed?.length ?? 0) })
+            return Response.json({ locked: false, lock, removedTasksCount: (removed?.length ?? 0) })
+        }
+
+        // NEW ACTION: REMOVE (Unshortlist)
+        if (action === 'remove') {
+            const { error: delErr } = await supabaseAdmin
+                .from('user_university_locks')
+                .delete()
+                .eq('user_id', user.id)
+                .eq('university_id', university_id)
+
+            if (delErr) {
+                console.warn('[LOCK ROUTE] remove error', delErr)
+                return new Response(JSON.stringify({ error: delErr.message }), { status: 500 })
+            }
+
+            return Response.json({ success: true, removed: true })
         }
 
         return new Response(JSON.stringify({ error: 'invalid action' }), { status: 400 })
@@ -236,7 +213,7 @@ export async function GET() {
 
     const { data: locks, error } = await supabase
         .from('user_university_locks')
-        .select('university_id')
+        .select('university_id, status') // Selected status
         .eq('user_id', user.id)
 
     if (error) {
@@ -244,7 +221,9 @@ export async function GET() {
         return new Response(JSON.stringify({ error: error.message }), { status: 500 })
     }
 
-    return new Response(JSON.stringify({ lockedUniversityIds: locks.map(l => l.university_id) }), {
+    return new Response(JSON.stringify({
+        locks: locks // Return full objects
+    }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
     })
