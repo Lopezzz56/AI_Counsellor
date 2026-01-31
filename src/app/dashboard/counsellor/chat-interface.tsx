@@ -28,10 +28,8 @@ export default function CounsellorChatInterface({ initialProfile }: { initialPro
 
 Here’s what I can help you with:
 • Analyze your profile strengths & gaps
-• Recommend universities (Dream / Target / Safe)
-• Explain why a university fits and its risks
-• Create application tasks once you lock a university
-• Guide you step-by-step through the application process
+• Recommend universities
+• Compare Shortlisted universities fits and risks
 
 You can start by asking:
 “Analyze my profile” or “Recommend universities”

@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import CategoryCard from '@/components/category-card'
+import BeginnerGuideCards from '@/components/beginner-guide-cards'
 
 export default function TasksPage() {
     const [tasks, setTasks] = useState<any[]>([])
@@ -172,6 +173,9 @@ export default function TasksPage() {
                         My Tasks ({tasks.filter(t => !t.ai_generated).length})
                     </button>
                 </div>
+
+                {/* Beginner Guides - Context for Tasks */}
+                <BeginnerGuideCards />
 
                 {/* Category Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

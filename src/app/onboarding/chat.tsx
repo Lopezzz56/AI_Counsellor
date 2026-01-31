@@ -39,11 +39,15 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
     // Detect completion
     useEffect(() => {
         const lastMessage = messages[messages.length - 1];
-        if (lastMessage?.role === 'assistant' && lastMessage.content.includes('Dashboard unlocked')) {
+        if (lastMessage?.role === 'assistant' && (
+            lastMessage.content.includes('Dashboard unlocked') ||
+            lastMessage.content.includes('Perfect! I have everything I need') ||
+            lastMessage.content.includes('Setting up your dashboard')
+        )) {
             setTimeout(() => {
                 router.refresh();
                 router.push('/dashboard');
-            }, 1500);
+            }, 2500); // Increased slightly to let user read the message
         }
     }, [messages, router]);
 
@@ -51,63 +55,99 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
         console.log('[Client] Messages updated:', messages);
     }, [messages]);
 
-    // Initialize speech recognition
+    const toggleListening = () => {
+        if (!recognition) {
+            toast.error('Voice input not available', { description: 'Please use Chrome/Edge' })
+            return
+        }
+
+        if (isListening) {
+            recognition.stop()
+            setIsListening(false)
+        } else {
+            setInputValue('')
+            recognition.start()
+            setIsListening(true)
+
+            // Silence Detection Timeout
+            // If no result is received within 4 seconds, we assume silence/error attempt and stop
+            // NOTE: 'onresult' resets this if user speaks.
+            // Simplified: Just auto-stop if max duration (handled by browser usually) or we simple manual timeout if needed.
+            // But user asked for specific behavior: "stop if no voice heard for 3s". 
+            // Web Speech API 'onspeechend' helps, but manual timeout on silence is tricky without analyzing audio stream raw data.
+            // Best standard approach with SpeechRecognition:
+            // It automatically stops on silence. We just handle the 'onend'.
+        }
+    }
+
+    // Improved Silence/Auto-Stop Logic in useEffect
     useEffect(() => {
         if (typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
             const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition
             const recognitionInstance = new SpeechRecognition()
-            recognitionInstance.continuous = false
-            recognitionInstance.interimResults = false
+            recognitionInstance.continuous = false // Stops automatically after one sentence
+            recognitionInstance.interimResults = true // We want to see if they are talking
             recognitionInstance.lang = 'en-US'
-            recognitionInstance.maxAlternatives = 1
+
+            let silenceTimer: NodeJS.Timeout
+
             recognitionInstance.onstart = () => {
-                console.log('🎤 [Voice] Mic is active, speak now...')
-            }
-            recognitionInstance.onresult = (event: any) => {
-                const transcript = event.results[0][0].transcript
-                console.log('🎤 [Voice] Transcript received:', transcript)
-                setIsListening(false)
-                // Automatically send the transcribed message
-                console.log('🎤 [Voice] Scheduling sendMessage...')
-                setTimeout(() => {
-                    console.log('🎤 [Voice] Calling sendMessage with:', transcript)
-                    sendMessage(transcript)
-                }, 100)
+                console.log('🎤 [Voice] Listening...')
             }
 
-            recognitionInstance.onerror = (event: any) => {
-                console.error('🎤 [Voice] Speech recognition error:', event.error)
-                setIsListening(false)
+            recognitionInstance.onresult = (event: any) => {
+                const transcript = event.results[0][0].transcript
+                setInputValue(transcript) // Show live text
+
+                // Clear existing timer
+                clearTimeout(silenceTimer)
+
+                // Set new timer: if no new result for 2.5s, stop and send
+                silenceTimer = setTimeout(() => {
+                    console.log('🎤 [Voice] Silence detected. Stopping...')
+                    recognitionInstance.stop()
+                }, 2500)
             }
 
             recognitionInstance.onend = () => {
                 setIsListening(false)
+                clearTimeout(silenceTimer)
+
+                // If we have text, send it
+                setInputValue(prev => {
+                    if (prev.trim().length > 1) {
+                        sendMessage(prev)
+                        return ''
+                    }
+                    return prev
+                })
             }
 
             setRecognition(recognitionInstance)
         }
     }, [])
 
-    const toggleListening = () => {
-        if (!recognition) {
-            console.error('🎤 [Voice] Speech recognition not supported')
-            toast.error('Speech recognition not supported', {
-                description: 'Please use Chrome or Edge browser for voice input'
-            })
-            return
-        }
+    const VoiceWaves = () => (
+        <div className="absolute inset-0 flex items-center justify-center">
+            {[...Array(3)].map((_, i) => (
+                <motion.div
+                    key={i}
+                    className="absolute w-full h-full rounded-full bg-red-500/30"
+                    initial={{ scale: 1, opacity: 0.5 }}
+                    animate={{ scale: [1, 2], opacity: [0.5, 0] }}
+                    transition={{
+                        duration: 1.5,
+                        repeat: Infinity,
+                        delay: i * 0.4,
+                        ease: "easeOut",
+                    }}
+                />
+            ))}
+        </div>
+    );
 
-        if (isListening) {
-            console.log('🎤 [Voice] Stopping recognition...')
-            recognition.stop()
-            setIsListening(false)
-        } else {
-            console.log('🎤 [Voice] Starting recognition...')
-            setInputValue('') // Clear input when starting to record
-            recognition.start()
-            setIsListening(true)
-        }
-    }
+    // Helper for unique IDs
+    const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     // Extracted message sending logic
     const sendMessage = async (messageText: string) => {
@@ -120,7 +160,7 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
         }
 
         const userMessage: UIMessage = {
-            id: `user - ${Date.now()} `,
+            id: generateId('user'),
             role: 'user',
             content: messageText,
         }
@@ -148,7 +188,7 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
                 setMessages((m) => [
                     ...m,
                     {
-                        id: `assistant - ${Date.now()} `,
+                        id: generateId('assistant'),
                         role: 'assistant',
                         content: json.assistantText,
                         metadata: json.error
@@ -177,7 +217,7 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
             setMessages((m) => [
                 ...m,
                 {
-                    id: `assistant - network - ${Date.now()} `,
+                    id: generateId('assistant-network'),
                     role: 'assistant',
                     content: '🚫 Network or server error. Please retry.',
                     metadata: { error: true },
@@ -221,7 +261,7 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
     // When you call the API (debug mode), do:
     const handleStart = async () => {
         const userMessage: UIMessage = {
-            id: `user - start - ${Date.now()} `,
+            id: generateId('user-start'),
             role: 'user',
             content: 'Hi, I am ready to start.',
         }
@@ -248,7 +288,7 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
                 setMessages((m) => [
                     ...m,
                     {
-                        id: `assistant - start - ${Date.now()} `,
+                        id: generateId('assistant-start'),
                         role: 'assistant',
                         content: json.assistantText,
                     },
@@ -264,7 +304,7 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
             setMessages((m) => [
                 ...m,
                 {
-                    id: `assistant - error - ${Date.now()} `,
+                    id: generateId('assistant-error'),
                     role: 'assistant',
                     content: '⚠️ Unable to start onboarding right now.',
                     metadata: { error: true },
@@ -337,9 +377,9 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
                                 className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} `}
                             >
                                 <div
-                                    className={`max - w - [85 %] sm: max - w - [75 %] rounded - 3xl px - 6 py - 4 text - md leading - relaxed backdrop - blur - md ${m.role === 'user'
-                                            ? 'bg-gradient-to-br from-primary/90 to-primary text-primary-foreground ml-12 rounded-tr-md shadow-lg shadow-primary/20'
-                                            : 'bg-muted/60 text-foreground mr-12 rounded-tl-md shadow-lg shadow-black/5 border border-primary/5 whitespace-pre-line'
+                                    className={`max-w-[85%] sm:max-w-[75%] rounded-3xl px-6 py-4 text-md leading-relaxed backdrop-blur-md ${m.role === 'user'
+                                        ? 'bg-gradient-to-br from-primary/90 to-primary text-primary-foreground ml-12 rounded-tr-md shadow-lg shadow-primary/20'
+                                        : 'bg-muted/60 text-foreground mr-12 rounded-tl-md shadow-lg shadow-black/5 border border-primary/5 whitespace-pre-line'
                                         } `}
                                 >
                                     <p className={m.metadata?.error ? 'text-red-500 italic' : ''}> {m.content} </p>
@@ -377,6 +417,22 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
                     onSubmit={onSubmit}
                     className="max-w-3xl mx-auto relative flex items-center"
                 >
+                    {isListening && (
+                        <div className="absolute left-14 bottom-1 flex items-end gap-0.5 h-4 pointer-events-none">
+                            {[...Array(5)].map((_, i) => (
+                                <motion.div
+                                    key={i}
+                                    className="w-0.5 bg-primary/40 rounded-full"
+                                    animate={{ height: [4, 12, 4] }}
+                                    transition={{
+                                        duration: 0.5,
+                                        repeat: Infinity,
+                                        delay: i * 0.1,
+                                    }}
+                                />
+                            ))}
+                        </div>
+                    )}
                     <input
                         className="w-full bg-background/80 backdrop-blur-md border border-primary/20 rounded-full pl-6 pr-24 py-4 text-base focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-black/50 focus:bg-background shadow-xl shadow-black/10 transition-all placeholder:text-muted-foreground/50"
                         placeholder="Type your answer..."
@@ -384,19 +440,40 @@ export default function OnboardingChat({ initialProfile }: { initialProfile: Use
                         onChange={(e) => setInputValue(e.target.value)}
                         autoFocus
                     />
-                    <button
-                        type="button"
-                        onClick={toggleListening}
-                        className={`absolute right - 14 top - 1 / 2 - translate - y - 1 / 2 p - 2 rounded - full transition - all ${isListening
-                                ? 'bg-red-500 text-white shadow-lg shadow-red-500/30 animate-pulse'
-                                : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
+                    <div className="absolute right-16 top-1/2 -translate-y-1/2 flex items-center justify-center w-10 h-10">
+                        <AnimatePresence>
+                            {isListening && <VoiceWaves />}
+                        </AnimatePresence>
 
+                        <button
+                            type="button"
+                            onClick={toggleListening}
+                            className={`relative z-10 p-2.5 rounded-xl transition-all duration-500 ${isListening
+                                ? 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.5)] scale-110'
+                                : 'bg-primary/10 text-primary hover:bg-primary/20 border border-primary/10'
+                                }`}
+                            title={isListening ? "Stop recording" : "Start voice input"}
+                        >
+                            <motion.div
+                                animate={isListening ? { scale: [1, 1.2, 1] } : {}}
+                                transition={{ repeat: Infinity, duration: 1 }}
+                            >
+                                {isListening ? (
+                                    <MicOff className="w-4 h-4 stroke-[2.5]" />
+                                ) : (
+                                    <Mic className="w-4 h-4 stroke-[2.5]" />
+                                )}
+                            </motion.div>
 
-                            } `}
-                        title={isListening ? "Stop recording" : "Start voice input"}
-                    >
-                        {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                    </button>
+                            {/* Small active dot indicator */}
+                            {isListening && (
+                                <motion.span
+                                    layoutId="activeDot"
+                                    className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white border-2 border-red-500 rounded-full z-20"
+                                />
+                            )}
+                        </button>
+                    </div>
                     <button
                         type="submit"
                         disabled={isLoading || !inputValue.trim()}

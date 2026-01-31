@@ -6,11 +6,12 @@ import ProfileSummary from './profile-summary'
 import ProfileStrength from './profile-strength'
 import ToDoList from './todo-list'
 import ApplicationGuidance from './application-guidance'
+import BeginnerGuideCards from '@/components/beginner-guide-cards'
 
 export default async function DashboardPage() {
     const profile = await getUserProfile()
 
-    if (!profile) redirect('/login')
+    if (!profile) redirect('/onboarding')
     if (!profile.onboarding_completed) redirect('/onboarding')
 
     return (
@@ -19,6 +20,9 @@ export default async function DashboardPage() {
 
                 {/* Section C: Stage Indicator */}
                 <StageBar currentStage={profile.current_stage} />
+
+                {/* Beginner Guides - Prominent Placement */}
+                <BeginnerGuideCards />
 
                 {/* Application Guidance - Full Width */}
                 <ApplicationGuidance />
@@ -30,8 +34,13 @@ export default async function DashboardPage() {
                             {/* Section A: Profile Summary */}
                             <ProfileSummary profile={profile} />
 
+
                             {/* Section B: Profile Strength */}
                             <ProfileStrength profile={profile} />
+                        </div>
+
+                        <div className="pt-4">
+                            {/* Guides moved to top */}
                         </div>
                     </div>
 

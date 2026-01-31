@@ -65,8 +65,8 @@ export async function POST(body: any) {
   // 🔒 Gate ONLY strategy
 
 
-  // Fetch locked universities if any exist
-  let lockedUniversities: any[] = []
+  // Fetch BOTH locked and shortlisted universities
+  let lockedAndShortlisted: any[] = []
   if (locks && locks.length > 0) {
     const { data } = await supabase
       .from('universities')
@@ -75,8 +75,14 @@ export async function POST(body: any) {
         'university_id',
         locks.map((l) => l.university_id)
       )
-    lockedUniversities = data || []
+    lockedAndShortlisted = data || []
   }
+
+  // Create a context summary
+  const universitiesContext = lockedAndShortlisted.map(u => {
+    const lockStatus = locks?.find(l => l.university_id === u.university_id)?.status || 'shortlisted'
+    return `- ${u.name} (${u.city}, ${u.country}) [Status: ${lockStatus.toUpperCase()}]\n  Risks: ${u.known_risks || 'None listed'}\n  Why fits: ${u.why_students_choose_it || 'N/A'}`
+  }).join('\n')
 
   const systemPrompt = `
 You are an AI Education Counsellor.
@@ -84,8 +90,8 @@ You are an AI Education Counsellor.
 Student Profile:
 ${JSON.stringify(currentProfile, null, 2)}
 
-Locked Universities:
-${lockedUniversities.length > 0 ? lockedUniversities.map(u => `${u.name} (${u.university_id})`).join(', ') : 'None'}
+My Universities (Shortlisted/Locked):
+${universitiesContext.length > 0 ? universitiesContext : 'No universities shortlisted yet.'}
 
 STRICT RULES:
 1. **Profile Analysis**:
@@ -97,14 +103,19 @@ STRICT RULES:
    - Be honest but encouraging.
 
 2. **Task Creation**:
-   - If user confirms a university or asks "What next?" for a locked university, use 'add_task'.
+   - If user confirms a university or asks "What next?" for a LOCKED university, use 'add_task'.
    - Use correct categories: documentation, application, test_prep, research.
 
 3. **Recommendations**:
-   - Only use 'recommend_universities' if explicitly asked for "suggestions", "universities", or "options".
-   - Do NOT use it for "Analysis".
+   - Only use 'recommend_universities' if explicitly asked for "suggestions", "find universities", or "options".
+   - Do NOT use it for "Analysis" or "Comparison".
 
-4. **Tone**:
+4. **Comparisons & Fit**:
+   - If asked "Which should I lock?" or "Compare these", use the "My Universities" list above.
+   - Compare them based on the student's profile (e.g. "Aalto is better for AI, but TUM has lower fees").
+   - Explicitly mention Risks if asked.
+
+5. **Tone**:
    - Professional, supportive, and directive.
    - Short paragraphs.
 `
@@ -185,7 +196,7 @@ Create a concrete application task for a LOCKED university.
   let toolInvocations: any[] = []
 
   const result = await streamText({
-    model: google('gemini-2.5-flash'),
+    model: google('gemini-2.5-flash-lite'),
     system: systemPrompt,
     messages,
     tools,

@@ -6,6 +6,7 @@ import { useUniversityLocks } from '@/app/hooks/useUniversityLocks'
 import { GraduationCap, CheckCircle, Circle, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
+import BeginnerGuideCards from '@/components/beginner-guide-cards'
 
 interface LockedUniversity {
     university_id: string
@@ -169,6 +170,9 @@ export default function ApplicationGuidancePage() {
                             Track your application progress below.
                         </p>
                     </div>
+
+                    {/* Beginner Guides */}
+                    <BeginnerGuideCards />
                 </div>
 
                 {lockedUniversities.map((uni) => {
